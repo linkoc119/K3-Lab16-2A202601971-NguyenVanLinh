@@ -308,6 +308,18 @@ def main(argv=None) -> int:
                         help="trần thời gian mỗi lần chạy")
     parser.add_argument("--max-tokens", type=int, default=None,
                         help="ngân sách output mỗi lần gọi model")
+    parser.add_argument(
+        "--max-tokens-param",
+        default="auto",
+        choices=("auto", "max_tokens", "max_completion_tokens"),
+        help="tên tham số output budget cho endpoint real-model",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="temperature gửi tới endpoint real-model",
+    )
     parser.add_argument("--prompt-addendum", action="store_true",
                         help="thêm ràng buộc 'phải search trước khi abstain' vào system prompt")
     parser.add_argument("--out", default=str(DEFAULT_OUT), help="file điểm JSON")
@@ -339,6 +351,8 @@ def main(argv=None) -> int:
     config = RunnerConfig(
         flaky=not args.no_flaky,
         prompt_addendum=args.prompt_addendum,
+        max_tokens_param=args.max_tokens_param,
+        temperature=args.temperature,
         **({"wall_clock_seconds": args.max_seconds} if args.max_seconds else {}),
         **({"max_tokens": args.max_tokens} if args.max_tokens else {}),
     )

@@ -14,6 +14,10 @@ venv/
 # in it is submitted and nothing in it should ever be committed.
 runs/
 
+# Local real-model credentials. This file is sourced by run-real.ps1 and
+# must never be committed.
+.arena-env.ps1
+
 # Instructor-only phase material. NEVER present in this bundle, and never
 # committed if it ever lands here: it is how the scored round stays scored.
 phases/private/

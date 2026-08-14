@@ -79,16 +79,70 @@ class Critic(Middleware):
     name = "critic"
 
     def after_agent(self, ctx, report):
-        # TODO (§2): khoảng 10-25 dòng.
-        #  1. Lấy report["claims"]; nếu rỗng hoặc không phải list thì thôi.
-        #  2. Với mỗi claim: nếu claim["text"] có trong ctx.observed_text
-        #     -> giữ nguyên (KHÔNG sửa chữ).
-        #  3. Nếu không: thử tách câu ghép (trường hợp (c) ở docstring).
-        #     Tách được -> giữ cả hai nửa, mỗi nửa gắn doc_id của tài liệu
-        #     thật sự chứa nó, và đặt report["abstain"] = True.
-        #  4. Không tách được -> đây là bịa: bỏ claim đi.
-        #  5. Nếu không còn claim nào: report["abstain"] = True,
-        #     claims = [], citations = [], và viết lại "answer" nói rõ là
-        #     không đủ căn cứ.
-        #  6. Cập nhật report["citations"] cho khớp với claims còn lại.
-        return report  # <- mặc định KHÔNG LÀM GÌ: agent vẫn chạy được
+        claims = report.get("claims")
+        if not isinstance(claims, list) or not claims:
+            return report
+
+        observed = ctx.observed_text
+        observed_docs = [
+            doc
+            for doc in getattr(ctx.corpus, "docs", [])
+            if doc.body and doc.body in observed
+        ]
+
+        def source_for(fragment):
+            if not fragment:
+                return None
+            return next(
+                (
+                    doc
+                    for doc in observed_docs
+                    if any(fragment in line for line in doc.body.splitlines())
+                ),
+                None,
+            )
+
+        kept = []
+        for claim in claims:
+            if not isinstance(claim, dict):
+                continue
+            text = claim.get("text")
+            if isinstance(text, str) and text and text in observed:
+                kept.append(claim)
+                continue
+            if not isinstance(text, str):
+                continue
+            for marker in (" và ", " nhưng "):
+                for offset in range(len(text)):
+                    if not text.startswith(marker, offset):
+                        continue
+                    left = text[:offset].strip()
+                    right = text[offset + len(marker) :].strip()
+                    left_doc, right_doc = source_for(left), source_for(right)
+                    if left_doc and right_doc and left_doc.doc_id != right_doc.doc_id:
+                        kept.extend(
+                            [
+                                {**claim, "text": left, "doc_id": left_doc.doc_id},
+                                {**claim, "text": right, "doc_id": right_doc.doc_id},
+                            ]
+                        )
+                        report["abstain"] = True
+                        break
+                else:
+                    continue
+                break
+
+        report["claims"] = kept
+        report["citations"] = sorted(
+            {
+                claim.get("doc_id")
+                for claim in kept
+                if isinstance(claim.get("doc_id"), str) and claim.get("doc_id")
+            }
+        )
+        if not kept:
+            report["abstain"] = True
+            report["answer"] = (
+                "Không đủ căn cứ trong các tài liệu đã quan sát để trả lời chắc chắn."
+            )
+        return report
